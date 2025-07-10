@@ -11,4 +11,4 @@ env:
           time_gap_mask_max_steps: 1000001
 
         target_pose_visible_prob: 0
-        motion_text_embeddings_visible_prob: 0
+        motion_text_embeddings_visible_prob: 1

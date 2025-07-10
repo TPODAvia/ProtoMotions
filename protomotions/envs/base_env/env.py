@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional
-
+import math
+from isaac_utils import rotations
 import numpy as np
 import torch
 from hydra.utils import instantiate, get_class
@@ -18,6 +19,7 @@ from protomotions.envs.base_env.env_utils.terrains.terrain_config import Terrain
 from protomotions.envs.base_env.components.humanoid_obs import HumanoidObs
 from protomotions.envs.base_env.components.terrain_obs import TerrainObs
 from protomotions.envs.base_env.components.motion_manager import MotionManager
+from protomotions.envs.base_env.components.vision_obs import VisionObs
 
 from protomotions.utils.motion_lib import MotionLib
 from protomotions.utils.scene_lib import SceneLib
@@ -95,6 +97,10 @@ class BaseEnv:
         # Buffers
         self.self_obs_cb = HumanoidObs(self.config.humanoid_obs, self)
         self.terrain_obs_cb = TerrainObs(self.config.terrain.config, self)
+        # Vision-based observation component
+        self.vision_obs_cb = None
+        if hasattr(self.config, 'vision_obs') and self.config.vision_obs.enabled:
+            self.vision_obs_cb = VisionObs(self.config, self)
 
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
@@ -132,6 +138,9 @@ class BaseEnv:
         obs = self.self_obs_cb.get_obs()
         terrain_obs = self.terrain_obs_cb.get_obs()
         obs.update(terrain_obs)
+        # Add vision context if enabled
+        if self.vision_obs_cb is not None:
+            obs.update(self.vision_obs_cb.get_obs())
         return obs
 
     def get_action_size(self):
@@ -279,6 +288,12 @@ class BaseEnv:
         self.progress_buf += 1
         self.self_obs_cb.post_physics_step()
 
+        # Update keyboard input if available
+        if hasattr(self.simulator, 'get_keyboard_state'):
+            keyboard_state = self.simulator.get_keyboard_state()
+            if hasattr(self, 'update_keyboard_input'):
+                self.update_keyboard_input(keyboard_state)
+
         self.compute_observations()
         self.compute_reward()
         if not self.disable_reset:
@@ -301,6 +316,8 @@ class BaseEnv:
 
         self.self_obs_cb.compute_observations(env_ids)
         self.terrain_obs_cb.compute_observations(env_ids)
+        if self.vision_obs_cb is not None:
+            self.vision_obs_cb.compute_observations(env_ids)
 
     def compute_reset(self):
         bodies_positions = self.simulator.get_bodies_state().rigid_body_pos
@@ -348,12 +365,18 @@ class BaseEnv:
             offset=0,
         )
 
+        rnd_v, rnd_w = self._sample_random_velocities(env_ids.shape[0])
+        root_vel += rnd_v
+        root_ang_vel += rnd_w
+
         # Transfer entire body to the proper coordinates
         rigid_body_pos[:, :, :3] -= (
             rigid_body_pos[:, 0, :3].unsqueeze(1).clone()
         )
         rigid_body_pos[:, :, :3] += root_pos.unsqueeze(1)
-        
+
+        root_rot = self.randomize_quat(root_rot, self.device, yaw_only=False)
+
         new_states = RobotState(
             root_pos=root_pos,
             root_rot=root_rot,
@@ -457,6 +480,9 @@ class BaseEnv:
             offset=root_offset,
             requires_scene=requires_scene,
         )
+        rnd_v, rnd_w = self._sample_random_velocities(env_ids.shape[0])
+        ref_state.root_vel += rnd_v
+        ref_state.root_ang_vel += rnd_w
 
         # Transfer entire body to the proper coordinates
         ref_state.rigid_body_pos[:, :, :3] -= (
@@ -464,7 +490,97 @@ class BaseEnv:
         )
         ref_state.rigid_body_pos[:, :, :3] += ref_state.root_pos.unsqueeze(1)
 
+        ref_state.root_rot = self.randomize_quat(ref_state.root_rot, self.device, yaw_only=False)
+
         return ref_state, motion_ids, motion_times
+
+    def randomize_quat(
+        self,
+        root_quat: torch.Tensor,
+        device: torch.device,
+        yaw_only: bool = True,
+        prob: float = 0.01,
+    ) -> torch.Tensor:
+        """
+        With probability `prob`, returns q_rand ⊗ root_quat; otherwise returns root_quat.
+        root_quat is (B,4), w last.
+
+        Args:
+            root_quat: (B,4) input quaternions.
+            device:    torch device.
+            yaw_only:  if True use a random yaw only; else full SO(3).
+            prob:      chance in [0,1] to apply randomization per env.
+
+        Returns:
+            (B,4) quaternions.
+        """
+        B = root_quat.shape[0]
+        # decide which envs to randomize
+        mask = torch.rand(B, device=device) < prob  # (B,)
+
+        # if none get randomized, just return early
+        if not mask.any():
+            return root_quat
+
+        # prepare q_rand for all B
+        if yaw_only:
+            ϕ = (torch.rand(B, device=device) * 2.0 - 1.0) * math.pi
+            half = 0.5 * ϕ
+            q_rand = torch.stack([
+                torch.zeros_like(half),          # x
+                torch.zeros_like(half),          # y
+                torch.sin(half),                 # z
+                torch.cos(half)                  # w
+            ], dim=-1)
+        else:
+            u1 = torch.rand(B, device=device)
+            u2 = torch.rand(B, device=device) * 2.0 * math.pi
+            u3 = torch.rand(B, device=device) * 2.0 * math.pi
+            r1 = torch.sqrt(1.0 - u1)
+            r2 = torch.sqrt(u1)
+            q_rand = torch.stack([
+                r1 * torch.sin(u2),
+                r1 * torch.cos(u2),
+                r2 * torch.sin(u3),
+                r2 * torch.cos(u3),
+            ], dim=-1)
+
+        # apply quat multiplication
+        q_out = rotations.quat_mul(q_rand, root_quat, True)
+
+        # only use q_out where mask==True
+        mask = mask.unsqueeze(-1)  # (B,1)
+        return torch.where(mask, q_out, root_quat)
+
+    def _sample_random_velocities(self, batch: int) -> tuple[Tensor, Tensor]:
+        """
+        Returns tensors:
+            root_lin_vel : (B, 3)  – linear velocity in world frame
+            root_ang_vel : (B, 3)  – angular velocity (roll, pitch, yaw) in rad/s
+
+        • Linear XY speed : up to ±0.6 m/s   (edit lin_max if you wish)
+        • Angular rates   : roll  ±4 rad/s
+                            pitch ±4 rad/s
+                            yaw   ±6 rad/s
+        (use ang_max if you want different limits)
+        """
+        # -------------------------------------------------
+        # Linear velocity
+        # -------------------------------------------------
+        lin_max   = 0.6                             # metres/second
+        lin_xy    = (torch.rand(batch, 2, device=self.device) * 2.0 - 1.0) * lin_max
+        lin_z     = torch.zeros(batch, 1, device=self.device)
+        root_lin_vel = torch.cat([lin_xy, lin_z], dim=-1)           # (B,3)
+
+        # -------------------------------------------------
+        # Angular velocity  (roll, pitch, yaw)
+        # -------------------------------------------------
+        ang_max   = torch.tensor([0.0, 0.0, 1.0], device=self.device)  # rad/s
+        # uniform in [-1,1] for each axis, scaled by ang_max
+        root_ang_vel = (torch.rand(batch, 3, device=self.device) * 2.0 - 1.0) * ang_max
+
+        return root_lin_vel, root_ang_vel
+
 
     def reset_hybrid_state_init(self, env_ids):
         num_envs = env_ids.shape[0]

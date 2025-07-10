@@ -22,6 +22,8 @@ import protomotions
 
 sys.modules['phys_anim'] = protomotions
 
+import open_clip
+
 
 class LoadedMotions(nn.Module):
     def __init__(
@@ -79,7 +81,7 @@ class MotionLib(DeviceDtypeModuleMixin):
             device="cpu",
             ref_height_adjust: float = 0,
             target_frame_rate: int = 30,
-            create_text_embeddings: bool = False,
+            create_text_embeddings: bool = True,  # Enable by default           
             fix_motion_heights: bool = True,
             skeleton_tree: Any = None,
             local_rot_conversion: Tensor = None,
@@ -99,6 +101,10 @@ class MotionLib(DeviceDtypeModuleMixin):
             torch.tensor(key_body_ids, dtype=torch.long, device=device),
             persistent=False,
         )
+
+        # Initialize text encoder if enabled
+        if self.create_text_embeddings:
+            self._init_text_encoder(device)
 
         if str(motion_file).split(".")[-1] in ["yaml", "npy", "npz", "np"]:
             print("Loading motions from yaml/npy file")
@@ -807,3 +813,20 @@ class MotionLib(DeviceDtypeModuleMixin):
         new_motion = SkeletonMotion.from_skeleton_state(new_sk_state, fps=target_frame_rate)
 
         return new_motion
+
+    def _init_text_encoder(self, device):
+        print("Initializing ViT-B-32 text encoder...")
+        self.text_model, _, self.text_preprocess = open_clip.create_model_and_transforms(
+            'ViT-B-32', pretrained='laion400m_e32'
+        )
+        self.tokenizer = open_clip.get_tokenizer('ViT-B-32')
+        self.text_model.eval()
+        self.text_model = self.text_model.to(device)
+
+    def get_text_embedding(self, text):
+        device = next(self.text_model.parameters()).device
+        with torch.no_grad():
+            tokens = self.tokenizer([text]).to(device)
+            text_features = self.text_model.encode_text(tokens)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        return text_features.cpu().numpy()

@@ -85,6 +85,9 @@ def main(override_config: OmegaConf):
         env = instantiate(
             config.env, device=fabric.device, simulation_app=simulation_app
         )
+        # Set global reference for text control
+        import protomotions.simulator.isaaclab.simulator as isaaclab_sim
+        isaaclab_sim._GLOBAL_ENV = env
     else:
         env = instantiate(config.env, device=fabric.device)
 

@@ -101,3 +101,9 @@ env:
       historical_obs:
 #        num_historical_stored_steps: 120  # How much history do we remember
         num_historical_conditioned_steps: 15  # We subsample from the history to condition on
+
+    ## Observations
+    vision_obs:
+      enabled: False  # Set True to use image->context (vision)
+      use_centerpose: False  # If True, use CenterPose; if False, use direct observation
+      centerpose_config: {}  # Placeholder for CenterPose-specific config

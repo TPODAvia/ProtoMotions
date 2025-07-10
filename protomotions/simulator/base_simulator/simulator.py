@@ -66,6 +66,15 @@ class Simulator(ABC):
 
         self._camera_target: Dict[str, int] = {"env": 0, "element": 0}
         
+        # Keyboard state tracking
+        self._keyboard_state = {
+            'w': False,
+            'a': False,
+            's': False,
+            'd': False,
+            'k': False,
+        }
+        
         self._user_is_recording, self._user_recording_state_change = False, False
         self._user_recording_video_queue_size = 100000
         self._delete_user_viewer_recordings = False
@@ -203,6 +212,26 @@ class Simulator(ABC):
         """
         print("User requested reset")
         self.user_requested_reset = True
+
+    def get_keyboard_state(self) -> Dict[str, bool]:
+        """
+        Get the current keyboard state.
+        
+        Returns:
+            Dict[str, bool]: Dictionary mapping key names to their pressed state.
+        """
+        return self._keyboard_state.copy()
+
+    def update_keyboard_state(self, key: str, pressed: bool) -> None:
+        """
+        Update the keyboard state for a specific key.
+        
+        Args:
+            key (str): The key name (e.g., 'w', 'a', 's', 'd')
+            pressed (bool): Whether the key is pressed
+        """
+        if key in self._keyboard_state:
+            self._keyboard_state[key] = pressed
 
     def step(self, common_actions: torch.Tensor, markers_state: Optional[Dict[str, MarkerState]] = None) -> None:
         """

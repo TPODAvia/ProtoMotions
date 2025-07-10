@@ -85,6 +85,22 @@ class IsaacGymSimulator(Simulator):
             self._gym.subscribe_viewer_keyboard_event(
                 self._viewer, gymapi.KEY_O, "toggle_camera_target"
             )
+            # WASD keyboard controls for steering
+            self._gym.subscribe_viewer_keyboard_event(
+                self._viewer, gymapi.KEY_W, "key_w"
+            )
+            self._gym.subscribe_viewer_keyboard_event(
+                self._viewer, gymapi.KEY_A, "key_a"
+            )
+            self._gym.subscribe_viewer_keyboard_event(
+                self._viewer, gymapi.KEY_S, "key_s"
+            )
+            self._gym.subscribe_viewer_keyboard_event(
+                self._viewer, gymapi.KEY_D, "key_d"
+            )
+            self._gym.subscribe_viewer_keyboard_event(
+                self._viewer, gymapi.KEY_K, "toggle_keyboard_control"
+            )
 
             # set the camera position based on up axis
             sim_params = self._gym.get_sim_params(self._sim)
@@ -1005,6 +1021,17 @@ class IsaacGymSimulator(Simulator):
                     self._requested_reset()
                 elif evt.action == "toggle_camera_target" and evt.value > 0:
                     self._toggle_camera_target()
+                # WASD keyboard controls
+                elif evt.action == "key_w":
+                    self.update_keyboard_state('w', evt.value > 0)
+                elif evt.action == "key_a":
+                    self.update_keyboard_state('a', evt.value > 0)
+                elif evt.action == "key_s":
+                    self.update_keyboard_state('s', evt.value > 0)
+                elif evt.action == "key_d":
+                    self.update_keyboard_state('d', evt.value > 0)
+                elif evt.action == "toggle_keyboard_control" and evt.value > 0:
+                    self.update_keyboard_state('k', evt.value > 0)
 
             if self.device.type != "cpu":
                 self._gym.fetch_results(self._sim, True)

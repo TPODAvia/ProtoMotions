@@ -322,6 +322,81 @@ Alternatively, you can use the pre-generated YAML files in `data/yaml_files`.
 ## Package the data for faster loading
 Run `python data/scripts/package_motion_lib.py <path_to_yaml_file> <path_to_AMASS_data_dir> <output_pt_file_path>` set `--humanoid-type=smplx` if using SMPL-X. Add the flag `--create-text-embeddings` to create text embeddings (for MaskedMimic).
 
+# Vision-based Context Extraction (Image->Context, CenterPose Integration)
+
+This project supports toggling between direct object observation and vision-based context extraction (e.g., using CenterPose) for evaluation and training.
+
+## How to Enable Vision-based Context (Image->Context)
+
+1. **Edit your environment config (e.g., `protomotions/config/env/base_env.yaml` or `protomotions/config/env/mimic.yaml`):**
+
+```yaml
+env:
+  config:
+    # ...
+    vision_obs:
+      enabled: True           # Set to True to use image->context (vision)
+      use_centerpose: True    # If True, use CenterPose; if False, use direct observation
+      centerpose_config: {}   # (Optional) CenterPose-specific config
+```
+
+2. **What happens when enabled:**
+   - If `enabled: True` and `use_centerpose: True`, the environment will call a CenterPose stub (see `protomotions/envs/base_env/components/vision_obs.py`).
+   - If `enabled: True` and `use_centerpose: False`, the environment will use direct object observation as context.
+   - If `enabled: False`, vision-based context is disabled.
+
+3. **How to extend with real CenterPose integration:**
+   - Edit `protomotions/envs/base_env/components/vision_obs.py`:
+     - Replace the `run_centerpose` method with actual CenterPose inference code.
+     - You may need to provide image input from your simulation/camera. See below.
+
+4. **How to add image input:**
+   - If your environment/simulator provides camera images, pass them to the `VisionObs` component (modify its constructor or `compute_observations` as needed).
+   - Example stub:
+     ```python
+     def compute_observations(self, env_ids):
+         if self.config.vision_obs.enabled:
+             images = self.env.get_images(env_ids)  # Implement this in your env/simulator
+             if self.config.vision_obs.use_centerpose:
+                 self.vision_context = self.run_centerpose(images)
+             ...
+     ```
+   - The current stub just returns zeros/ones as dummy context.
+
+5. **How to use in evaluation/training:**
+   - The toggle works for both training and evaluation. Just set the config as above and run your usual scripts (e.g., `python eval_agent.py ...`).
+   - The vision context will be included in the observation dictionary as `vision_context`.
+
+6. **How to access vision context in your agent/model:**
+   - In your agent/model code, look for the `vision_context` key in the observation dict.
+   - Example:
+     ```python
+     obs = env.get_obs()
+     vision_context = obs.get('vision_context', None)
+     ```
+
+## Example: Minimal Config for CenterPose
+
+```yaml
+env:
+  config:
+    vision_obs:
+      enabled: True
+      use_centerpose: True
+      centerpose_config:
+        model_path: /path/to/centerpose/model
+        ...
+```
+
+## Extending/Debugging
+- The `VisionObs` component is in `protomotions/envs/base_env/components/vision_obs.py`.
+- Replace the stubs with your actual image processing/CenterPose code as needed.
+- If you want to use a different vision model, add your logic to `run_centerpose` or add new methods.
+
+---
+
+For further help, see the code comments in `vision_obs.py` and the environment config files.
+
 # Citation
 
 This codebase builds upon prior work from NVIDIA and external collaborators. Please adhere to the relevant licensing in the respective repositories.

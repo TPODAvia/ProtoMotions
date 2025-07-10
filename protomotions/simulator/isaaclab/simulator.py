@@ -24,6 +24,8 @@ from protomotions.simulator.base_simulator.config import (
     SimulatorConfig,
 )
 from protomotions.simulator.base_simulator.robot_state import RobotState
+import yaml
+import subprocess
 
 
 class IsaacLabSimulator(Simulator):
@@ -258,6 +260,10 @@ class IsaacLabSimulator(Simulator):
 
         return objects_cfgs, initial_obj_pos
 
+    def toggle_key(self, key):
+        current = self._keyboard_state.get(key, False)
+        self.update_keyboard_state(key, not current)
+
     def _setup_keyboard(self) -> None:
         """
         Set up keyboard callbacks for control using the Se2Keyboard interface.
@@ -266,12 +272,64 @@ class IsaacLabSimulator(Simulator):
 
         self.keyboard_interface = Se2Keyboard()
         self.keyboard_interface.add_callback("R", self._requested_reset)
-        self.keyboard_interface.add_callback("U", self._update_inference_parameters)
+        self.keyboard_interface.add_callback("U", self._handle_text_control)
         self.keyboard_interface.add_callback("L", self._toggle_video_record)
         self.keyboard_interface.add_callback(";", self._cancel_video_record)
         self.keyboard_interface.add_callback("Q", self.close)
         self.keyboard_interface.add_callback("O", self._toggle_camera_target)
         self.keyboard_interface.add_callback("J", self._push_robot)
+
+        # WASD and K for steering control (toggle on press)
+        self.keyboard_interface.add_callback("W", lambda: self.toggle_key('w'))
+        self.keyboard_interface.add_callback("A", lambda: self.toggle_key('a'))
+        self.keyboard_interface.add_callback("S", lambda: self.toggle_key('s'))
+        self.keyboard_interface.add_callback("D", lambda: self.toggle_key('d'))
+        self.keyboard_interface.add_callback("K", lambda: self.toggle_key('k'))
+        # Key release events (if supported by Se2Keyboard)
+        if hasattr(self.keyboard_interface, 'add_release_callback'):
+            self.keyboard_interface.add_release_callback("W", lambda: self.update_keyboard_state('w', False))
+            self.keyboard_interface.add_release_callback("A", lambda: self.update_keyboard_state('a', False))
+            self.keyboard_interface.add_release_callback("S", lambda: self.update_keyboard_state('s', False))
+            self.keyboard_interface.add_release_callback("D", lambda: self.update_keyboard_state('d', False))
+            self.keyboard_interface.add_release_callback("K", lambda: self.update_keyboard_state('k', False))
+
+    def _handle_text_control(self):
+        yaml_path = "/tmp/text_control.yaml"
+        template = {'text_control': True, 'text_prompt': 'walk forward'}
+        import os
+        # If file does not exist, create and open for editing
+        if not os.path.exists(yaml_path):
+            with open(yaml_path, 'w') as f:
+                yaml.dump(template, f)
+            editor = os.environ.get('EDITOR', 'nano')
+            subprocess.call([editor, yaml_path])
+            print(f"Edit {yaml_path} and set your text prompt. Save and press U again.")
+            return
+        # If file exists, read and update if text_control is true
+        with open(yaml_path, 'r') as f:
+            data = yaml.safe_load(f)
+        if data.get('text_control', False):
+            text_prompt = data.get('text_prompt', 'walk forward')
+            print(f"[Text Control] Using prompt: {text_prompt}")
+            # Try to get the environment reference
+            env = getattr(self, 'env', None)
+            if env is None:
+                import protomotions.simulator.isaaclab.simulator as isaaclab_sim
+                env = getattr(isaaclab_sim, '_GLOBAL_ENV', None)
+            if env and hasattr(env, 'motion_lib') and hasattr(env.motion_lib, 'get_text_embedding'):
+                emb = env.motion_lib.get_text_embedding(text_prompt)
+                if hasattr(env, 'set_task_embedding'):
+                    env.set_task_embedding(emb)
+                elif hasattr(env, 'motion_manager') and hasattr(env.motion_manager, 'set_task_embedding'):
+                    env.motion_manager.set_task_embedding(emb)
+                else:
+                    print("[Text Control] No set_task_embedding method found on env or motion_manager.")
+            else:
+                print("[Text Control] Could not find motion_lib or get_text_embedding.")
+        else:
+            print(f"[Text Control] text_control is not enabled in {yaml_path}. Edit and set text_control: true.")
+            editor = os.environ.get('EDITOR', 'nano')
+            subprocess.call([editor, yaml_path])
 
     # =====================================================
     # Group 2: Environment Setup & Configuration

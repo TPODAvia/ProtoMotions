@@ -53,6 +53,19 @@ class Steering(BaseEnv):
             [self.num_envs], device=self.device, dtype=torch.float
         )
 
+        # Keyboard control variables
+        self.keyboard_control_enabled = False
+        self.keyboard_input = {
+            'w': False,  # Forward
+            's': False,  # Backward
+            'a': False,  # Left
+            'd': False,  # Right
+        }
+        self.keyboard_heading = 0.0  # Current heading from keyboard
+        self.keyboard_speed = 1.0    # Current speed from keyboard
+        self.keyboard_heading_change_rate = 2.0  # Radians per second
+        self.keyboard_speed_change_rate = 2.0    # Speed units per second
+
     def create_visualization_markers(self):
         if self.config.headless:
             return {}
@@ -103,10 +116,65 @@ class Steering(BaseEnv):
         self.check_update_task()
 
     def check_update_task(self):
-        reset_task_mask = self.progress_buf >= self._heading_change_steps
-        rest_env_ids = reset_task_mask.nonzero(as_tuple=False).flatten()
-        if len(rest_env_ids) > 0:
-            self.reset_heading_task(rest_env_ids)
+        # Only update task automatically if keyboard control is disabled
+        if not self.keyboard_control_enabled:
+            reset_task_mask = self.progress_buf >= self._heading_change_steps
+            rest_env_ids = reset_task_mask.nonzero(as_tuple=False).flatten()
+            if len(rest_env_ids) > 0:
+                self.reset_heading_task(rest_env_ids)
+
+    def update_keyboard_input(self, key_input):
+        """Update keyboard input state"""
+        # Check for K key to toggle keyboard control
+        if 'k' in key_input and key_input['k'] and not hasattr(self, '_k_pressed'):
+            self._k_pressed = True
+            self.keyboard_control_enabled = not self.keyboard_control_enabled
+            if self.keyboard_control_enabled:
+                print("Keyboard control ENABLED")
+            else:
+                print("Keyboard control DISABLED")
+        elif 'k' not in key_input or not key_input['k']:
+            self._k_pressed = False
+            
+        # Update other keys
+        for key in ['w', 'a', 's', 'd']:
+            if key in key_input:
+                self.keyboard_input[key] = key_input[key]
+
+    def enable_keyboard_control(self, enabled=True):
+        """Enable or disable keyboard control"""
+        self.keyboard_control_enabled = enabled
+        if enabled:
+            print("Keyboard control enabled. Use WASD to control the robot.")
+            print("W/S: Forward/Backward, A/D: Turn Left/Right")
+
+    def update_keyboard_controls(self):
+        """Update target direction and speed based on keyboard input"""
+        if not self.keyboard_control_enabled:
+            return
+
+        # Update heading based on A/D keys
+        if self.keyboard_input['a']:
+            self.keyboard_heading += self.keyboard_heading_change_rate * self.dt
+        if self.keyboard_input['d']:
+            self.keyboard_heading -= self.keyboard_heading_change_rate * self.dt
+
+        # Update speed based on W/S keys
+        if self.keyboard_input['w']:
+            self.keyboard_speed += self.keyboard_speed_change_rate * self.dt
+        if self.keyboard_input['s']:
+            self.keyboard_speed -= self.keyboard_speed_change_rate * self.dt
+
+        # Clamp speed to valid range
+        self.keyboard_speed = np.clip(self.keyboard_speed, self._tar_speed_min, self._tar_speed_max)
+
+        # Apply keyboard controls to all environments
+        self._tar_dir_theta[:] = self.keyboard_heading
+        self._tar_speed[:] = self.keyboard_speed
+        
+        # Update target direction vector
+        self._tar_dir[:, 0] = torch.cos(torch.tensor(self.keyboard_heading, device=self.device))
+        self._tar_dir[:, 1] = torch.sin(torch.tensor(self.keyboard_heading, device=self.device))
 
     def reset_heading_task(self, env_ids):
         n = len(env_ids)
@@ -155,6 +223,9 @@ class Steering(BaseEnv):
 
     def compute_observations(self, env_ids=None):
         super().compute_observations(env_ids)
+
+        # Update keyboard controls before computing observations
+        self.update_keyboard_controls()
 
         if env_ids is None:
             root_states = self.simulator.get_root_state()

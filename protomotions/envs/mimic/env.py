@@ -192,6 +192,9 @@ class Mimic(BaseEnv):
         if self.config.masked_mimic.enabled:
             masked_mimic_obs = self.masked_mimic_obs_cb.get_obs()
             obs.update(masked_mimic_obs)
+        # Add text_embedding to obs if available
+        if hasattr(self, 'text_embedding') and self.text_embedding is not None:
+            obs['text_embedding'] = self.text_embedding.clone()
         return obs
 
     def get_envs_respawn_position(
@@ -497,6 +500,16 @@ class Mimic(BaseEnv):
         self.mimic_obs_cb.compute_observations(env_ids)
         if self.config.masked_mimic.enabled:
             self.masked_mimic_obs_cb.compute_observations(env_ids)
+
+        # Inject text embedding if available
+        if hasattr(self.motion_manager, 'current_text_embedding'):
+            emb = torch.tensor(self.motion_manager.current_text_embedding, device=self.device, dtype=torch.float32)
+            # If single embedding, expand to batch if needed
+            if emb.ndim == 1:
+                emb = emb.unsqueeze(0).expand(self.num_envs, -1)
+            self.text_embedding = emb
+        else:
+            self.text_embedding = None
 
     def pre_physics_step(self, actions):
         if self.config.mimic_residual_control:

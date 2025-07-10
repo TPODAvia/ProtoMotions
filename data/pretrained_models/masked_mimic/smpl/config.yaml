@@ -46,6 +46,7 @@ eval_overrides:
       max_episode_length: 10000
       enable_height_termination: false
       mimic_early_termination: null
+      create_text_embeddings: true
 agent:
   _target_: protomotions.agents.masked_mimic.agent.MaskedMimic
   _recursive_: false

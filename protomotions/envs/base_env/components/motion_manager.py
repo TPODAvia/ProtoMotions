@@ -83,3 +83,7 @@ class MotionManager(BaseComponent):
     def load_state_dict(self, state_dict):
         if "motion_weights" in state_dict:
             self.motion_weights[:] = state_dict["motion_weights"].to(self.motion_weights.device)
+
+    def set_task_embedding(self, embedding):
+        self.current_text_embedding = embedding
+        print(f"[Text Control] Task embedding updated in MotionManager.")

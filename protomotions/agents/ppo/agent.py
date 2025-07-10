@@ -562,6 +562,16 @@ class PPO:
         self.eval()
         done_indices = None  # Force reset on first entry
         step = 0
+        
+        # Enable keyboard control for steering environments
+        if hasattr(self.env, 'enable_keyboard_control'):
+            self.env.enable_keyboard_control(True)
+            print("Keyboard control enabled for evaluation!")
+            print("Use WASD to control the robot:")
+            print("  W/S: Forward/Backward")
+            print("  A/D: Turn Left/Right")
+            print("  K: Toggle keyboard control on/off")
+        
         while self.config.max_eval_steps is None or step < self.config.max_eval_steps:
             obs = self.handle_reset(done_indices)
             # Obtain actor predictions
