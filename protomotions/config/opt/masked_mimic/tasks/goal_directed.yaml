@@ -1,0 +1,24 @@
+# @package _global_
+
+# Evaluation overrides for goal-directed MaskedMimic
+eval_overrides:
+  headless: false
+  num_envs: 1
+  max_eval_steps: 1000
+  
+  # Enable goal-directed evaluation
+  env:
+    config:
+      max_episode_length: 300
+      goal_params:
+        obs_size: 3
+        goal_distance_threshold: 2.0
+        goal_reward_weight: 1.0
+        max_goal_distance: 20.0
+  
+  # Set VAE to deterministic mode for evaluation
+  agent:
+    config:
+      vae:
+        noise_type: "zeros"  # Use deterministic VAE output
+      expert_model_path: null  # Don't need expert model during evaluation 

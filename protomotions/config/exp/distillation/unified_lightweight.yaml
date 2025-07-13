@@ -1,0 +1,41 @@
+# @package _global_
+
+defaults:
+  - /agent/distillation/agent
+  - /env/mimic
+
+  - /agent/mimic/options/global_tracking
+  - /agent/mimic/options/early_termination_tracking_err
+  - /terrain/flat
+
+env:
+  config:
+    # Enable all capabilities for unified training
+    path_follower_params:
+      enable_path_termination: true
+      num_traj_samples: 10
+      path_obs_size: ${eval:${.num_path_obs_per_point}*${.num_traj_samples}}
+      height_conditioned: true
+      num_path_obs_per_point: ${eval:${.height_conditioned}*1+2}
+    
+    goal_params:
+      obs_size: 3
+      goal_distance_threshold: 2.0
+      goal_reward_weight: 1.0
+      max_goal_distance: 20.0
+    
+    steering_params:
+      heading_change_steps_min: 40
+      heading_change_steps_max: 150
+      random_heading_probability: 0.2
+      standard_heading_change: 1.57
+      tar_speed_min: 1.2
+      tar_speed_max: 6
+      standard_speed_change: 0.3
+      stop_probability: 0.05
+      obs_size: 3
+    
+    mimic_target_pose:
+      type: max-coords-future-rel
+      with_time: true
+      num_future_steps: 15 

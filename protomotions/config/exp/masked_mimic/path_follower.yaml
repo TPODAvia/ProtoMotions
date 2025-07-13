@@ -1,0 +1,60 @@
+# @package _global_
+
+defaults:
+  - /agent/masked_mimic/agent
+  - /env/mimic
+
+  - /agent/masked_mimic/models/encoder
+  - /agent/masked_mimic/models/prior
+  - /agent/masked_mimic/models/text_conditioning
+  - /agent/mimic/options/global_tracking
+  - /agent/mimic/options/early_termination_tracking_err
+  - /terrain/flat
+
+agent:
+  config:
+    # Add path following modules
+    modules:
+      path:
+        _target_: protomotions.agents.common.common.Flatten
+        config:
+          normalize_obs: true
+          norm_clamp_value: 5
+          obs_key: path
+        num_in: ${env.config.path_follower_params.path_obs_size}
+        num_out: ${.num_in}
+
+    # Extend the model to include path input
+    model:
+      config:
+        trunk:
+          config:
+            input_models:
+              path: ${agent.config.modules.path}
+
+    extra_inputs:
+      path: true
+
+env:
+  config:
+    # Enable both mimic and path following
+    mimic_target_pose:
+      enabled: true
+      type: max-coords-future-rel
+      with_time: true
+      num_future_steps: 15
+    masked_mimic:
+      enabled: true
+    humanoid_obs:
+      num_historical_steps: 120
+    
+    # Add path following parameters
+    path_follower_params:
+      num_traj_samples: 10
+      fail_dist: 4.0
+      fail_height_dist: 0.5
+      traj_sample_timestep: 0.5
+      path_obs_size: ${eval:${.num_path_obs_per_point}*${.num_traj_samples}}
+      enable_path_termination: True
+      height_conditioned: True
+      num_path_obs_per_point: ${eval:${.height_conditioned}*1+2} 

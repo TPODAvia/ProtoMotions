@@ -1,0 +1,61 @@
+# @package _global_
+
+defaults:
+  - /agent/masked_mimic/agent
+  - /env/mimic
+
+  - /agent/masked_mimic/models/encoder
+  - /agent/masked_mimic/models/prior
+  - /agent/masked_mimic/models/text_conditioning
+  - /agent/mimic/options/global_tracking
+  - /agent/mimic/options/early_termination_tracking_err
+  - /terrain/flat
+
+agent:
+  config:
+    # Add steering modules
+    modules:
+      steering:
+        _target_: protomotions.agents.common.common.Flatten
+        num_in: ${env.config.steering_params.obs_size}
+        num_out: ${.num_in}
+        config:
+          obs_key: steering
+          normalize_obs: true
+          norm_clamp_value: 5
+
+    # Extend the model to include steering input
+    model:
+      config:
+        trunk:
+          config:
+            input_models:
+              steering: ${agent.config.modules.steering}
+
+    extra_inputs:
+      steering: true
+
+env:
+  config:
+    # Enable both mimic and steering
+    mimic_target_pose:
+      enabled: true
+      type: max-coords-future-rel
+      with_time: true
+      num_future_steps: 15
+    masked_mimic:
+      enabled: true
+    humanoid_obs:
+      num_historical_steps: 120
+    
+    # Add steering parameters
+    steering_params:
+      heading_change_steps_min: 40
+      heading_change_steps_max: 150
+      random_heading_probability: 0.2
+      standard_heading_change: 1.57
+      tar_speed_min: 1.2
+      tar_speed_max: 6
+      standard_speed_change: 0.3
+      stop_probability: 0.05
+      obs_size: 3 

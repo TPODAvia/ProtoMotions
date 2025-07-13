@@ -1,0 +1,25 @@
+# @package _global_
+
+# Evaluation overrides for path following with MaskedMimic
+eval_overrides:
+  headless: false
+  num_envs: 1
+  max_eval_steps: 1000
+  
+  # Enable path following evaluation
+  env:
+    config:
+      max_episode_length: 300
+      path_follower_params:
+        enable_path_termination: false  # Don't terminate on path failure during eval
+        num_traj_samples: 10
+        path_obs_size: ${eval:${.num_path_obs_per_point}*${.num_traj_samples}}
+        height_conditioned: true
+        num_path_obs_per_point: ${eval:${.height_conditioned}*1+2}
+  
+  # Set VAE to deterministic mode for evaluation
+  agent:
+    config:
+      vae:
+        noise_type: "zeros"  # Use deterministic VAE output
+      expert_model_path: null  # Don't need expert model during evaluation 

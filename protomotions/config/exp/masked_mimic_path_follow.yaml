@@ -1,0 +1,37 @@
+# ───────────────────────────────────────────────────────────────
+#  THIRD-STAGE:  Path-Follower on top of a frozen Masked-Mimic
+# ───────────────────────────────────────────────────────────────
+# 1) Pull in the whole stage-2 recipe
+defaults:
+  - masked_mimic/flat_terrain        # <- original BFM
+  - /env/path_follower               # <- swap to path env (goal = /env/steering)
+  - _self_
+
+# 2) Task-specific tweaks
+agent:
+  config:
+    # (a) Point at the *folder* that holds stage-2 weights
+    expert_model_path: ${hydra:runtime.cwd}/results/smpl_masked_mimic
+
+    # (b) Disable reconstruction losses – we only care about the new reward
+    recon_loss_w: 0.0
+
+    # (c) Plug the path observation into both actor & critic
+    modules:
+      path:
+        _target_: protomotions.agents.common.common.Flatten
+        num_in: ${env.config.path_follower_params.path_obs_size}
+        num_out: ${.num_in}
+        config:
+          obs_key: path
+          normalize_obs: true
+          norm_clamp_value: 5
+
+    model:
+      actor:
+        config.mu_model.config.input_models.path: ${agent.config.modules.path}
+      critic:
+        config.input_models.path: ${agent.config.modules.path}
+
+    # (d) Optional – down-size if GPU RAM is tight
+    num_envs: 1024          # default is 4096

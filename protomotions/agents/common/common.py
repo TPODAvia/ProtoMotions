@@ -38,6 +38,7 @@ class NormObsBase(nn.Module):
         self.num_in = num_in
         self.num_out = num_out
         self.build_norm()
+        self._assert_no_shared_params_or_buffers()
 
     def build_norm(self):
         if self.config.normalize_obs:
@@ -59,11 +60,25 @@ class NormObsBase(nn.Module):
             raise ValueError("NaN in obs")
         return obs
 
+    def _assert_no_shared_params_or_buffers(self):
+        seen = {}
+        for name, param in self.named_parameters():
+            addr = param.data.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED PARAM MEMORY in NormObsBase: {name} and {seen[addr]}")
+            seen[addr] = name
+        for name, buf in self.named_buffers():
+            addr = buf.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED BUFFER MEMORY in NormObsBase: {name} and {seen[addr]}")
+            seen[addr] = name
+
 
 class Flatten(NormObsBase):
     def __init__(self, config, num_in: int, num_out: int):
         super().__init__(config, num_in, num_out)
         self.flatten = nn.Flatten()
+        self._assert_no_shared_params_or_buffers()
 
     def forward(self, input_dict, *args, **kwargs):
         obs = input_dict[self.config.obs_key]

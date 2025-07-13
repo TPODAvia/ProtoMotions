@@ -10,6 +10,9 @@ defaults:
   - /agent/mimic/models/mlp_critic_target_pose
   - /agent/mimic/options/global_tracking
   - /agent/mimic/options/early_termination_tracking_err
+  - /agent/ppo/models/transformer_actor_terrain
+  - /agent/ppo/models/mlp_critic_terrain
+  - /terrain/flat
 
 env:
   config:

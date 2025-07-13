@@ -1,0 +1,56 @@
+# @package _global_
+
+defaults:
+  - /agent/masked_mimic/agent
+  - /env/mimic
+
+  - /agent/masked_mimic/models/encoder
+  - /agent/masked_mimic/models/prior
+  - /agent/masked_mimic/models/text_conditioning
+  - /agent/mimic/options/global_tracking
+  - /agent/mimic/options/early_termination_tracking_err
+  - /terrain/flat
+
+agent:
+  config:
+    # Add goal direction modules
+    modules:
+      goal:
+        _target_: protomotions.agents.common.common.Flatten
+        config:
+          normalize_obs: true
+          norm_clamp_value: 5
+          obs_key: goal
+        num_in: ${env.config.goal_params.obs_size}
+        num_out: ${.num_in}
+
+    # Extend the model to include goal input
+    model:
+      config:
+        trunk:
+          config:
+            input_models:
+              goal: ${agent.config.modules.goal}
+
+    extra_inputs:
+      goal: true
+
+env:
+  config:
+    # Enable both mimic and goal following
+    mimic_target_pose:
+      enabled: true
+      type: max-coords-future-rel
+      with_time: true
+      num_future_steps: 15
+    masked_mimic:
+      enabled: true
+    humanoid_obs:
+      num_historical_steps: 120
+    
+    # Add goal following parameters
+    goal_params:
+      obs_size: 3  # [x, y, distance_to_goal]
+      goal_distance_threshold: 2.0
+      goal_reward_weight: 1.0
+      max_goal_distance: 20.0 

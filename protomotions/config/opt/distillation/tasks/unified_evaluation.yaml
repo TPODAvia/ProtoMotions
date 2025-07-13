@@ -1,0 +1,35 @@
+# @package _global_
+
+# Evaluation overrides for unified lightweight model
+eval_overrides:
+  headless: false
+  num_envs: 1
+  max_eval_steps: 1000
+  
+  # Enable all capabilities for evaluation
+  env:
+    config:
+      max_episode_length: 300
+      path_follower_params:
+        enable_path_termination: false  # Don't terminate on path failure during eval
+        num_traj_samples: 10
+        path_obs_size: ${eval:${.num_path_obs_per_point}*${.num_traj_samples}}
+        height_conditioned: true
+        num_path_obs_per_point: ${eval:${.height_conditioned}*1+2}
+      
+      goal_params:
+        obs_size: 3
+        goal_distance_threshold: 2.0
+        goal_reward_weight: 1.0
+        max_goal_distance: 20.0
+      
+      steering_params:
+        heading_change_steps_min: 40
+        heading_change_steps_max: 150
+        random_heading_probability: 0.2
+        standard_heading_change: 1.57
+        tar_speed_min: 1.2
+        tar_speed_max: 6
+        standard_speed_change: 0.3
+        stop_probability: 0.05
+        obs_size: 3 

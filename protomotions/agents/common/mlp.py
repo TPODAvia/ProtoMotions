@@ -24,6 +24,20 @@ class MLP(nn.Module):
         super().__init__()
         self.config = config
         self.mlp = build_mlp(self.config, num_in, num_out)
+        self._assert_no_shared_params_or_buffers()
+
+    def _assert_no_shared_params_or_buffers(self):
+        seen = {}
+        for name, param in self.named_parameters():
+            addr = param.data.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED PARAM MEMORY in MLP: {name} and {seen[addr]}")
+            seen[addr] = name
+        for name, buf in self.named_buffers():
+            addr = buf.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED BUFFER MEMORY in MLP: {name} and {seen[addr]}")
+            seen[addr] = name
 
     def forward(self, input_dict, *args, **kwargs):
         if isinstance(input_dict, torch.Tensor):
@@ -35,6 +49,20 @@ class MLP_WithNorm(NormObsBase):
     def __init__(self, config, num_in: int, num_out: int):
         super().__init__(config, num_in, num_out)
         self.mlp = build_mlp(self.config, num_in, num_out)
+        self._assert_no_shared_params_or_buffers()
+
+    def _assert_no_shared_params_or_buffers(self):
+        seen = {}
+        for name, param in self.named_parameters():
+            addr = param.data.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED PARAM MEMORY in MLP_WithNorm: {name} and {seen[addr]}")
+            seen[addr] = name
+        for name, buf in self.named_buffers():
+            addr = buf.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED BUFFER MEMORY in MLP_WithNorm: {name} and {seen[addr]}")
+            seen[addr] = name
 
     def forward(self, input_dict, return_norm_obs=False):
         obs = super().forward(input_dict[self.config.obs_key])
@@ -61,6 +89,20 @@ class MultiHeadedMLP(nn.Module):
         self.input_models = nn.ModuleDict(input_models)
 
         self.trunk: MLP = instantiate(self.config.trunk, num_in=self.feature_size)
+        self._assert_no_shared_params_or_buffers()
+
+    def _assert_no_shared_params_or_buffers(self):
+        seen = {}
+        for name, param in self.named_parameters():
+            addr = param.data.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED PARAM MEMORY in MultiHeadedMLP: {name} and {seen[addr]}")
+            seen[addr] = name
+        for name, buf in self.named_buffers():
+            addr = buf.storage().data_ptr()
+            if addr in seen:
+                raise RuntimeError(f"SHARED BUFFER MEMORY in MultiHeadedMLP: {name} and {seen[addr]}")
+            seen[addr] = name
 
     def forward(self, input_dict, return_norm_obs=False):
         if return_norm_obs:

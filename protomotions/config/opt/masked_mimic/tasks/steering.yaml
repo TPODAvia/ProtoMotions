@@ -1,0 +1,29 @@
+# @package _global_
+
+# Evaluation overrides for steering with MaskedMimic
+eval_overrides:
+  headless: false
+  num_envs: 1
+  max_eval_steps: 1000
+  
+  # Enable steering evaluation with keyboard controls
+  env:
+    config:
+      max_episode_length: 300
+      steering_params:
+        heading_change_steps_min: 40
+        heading_change_steps_max: 150
+        random_heading_probability: 0.2
+        standard_heading_change: 1.57
+        tar_speed_min: 1.2
+        tar_speed_max: 6
+        standard_speed_change: 0.3
+        stop_probability: 0.05
+        obs_size: 3
+  
+  # Set VAE to deterministic mode for evaluation
+  agent:
+    config:
+      vae:
+        noise_type: "zeros"  # Use deterministic VAE output
+      expert_model_path: null  # Don't need expert model during evaluation 
